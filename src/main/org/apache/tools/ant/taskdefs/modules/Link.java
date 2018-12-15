@@ -18,11 +18,12 @@
 
 package org.apache.tools.ant.taskdefs.modules;
 
-import java.io.File;
-import java.io.PrintStream;
 import java.io.ByteArrayOutputStream;
-import java.io.Reader;
+import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.io.Reader;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -52,6 +53,8 @@ import org.apache.tools.ant.BuildException;
 import org.apache.tools.ant.Project;
 import org.apache.tools.ant.Task;
 
+import org.apache.tools.ant.taskdefs.LogOutputStream;
+
 import org.apache.tools.ant.types.EnumeratedAttribute;
 import org.apache.tools.ant.types.LogLevel;
 import org.apache.tools.ant.types.Path;
@@ -59,10 +62,10 @@ import org.apache.tools.ant.types.Reference;
 import org.apache.tools.ant.types.ResourceCollection;
 
 import org.apache.tools.ant.util.CompositeMapper;
-import org.apache.tools.ant.util.MergingMapper;
-
 import org.apache.tools.ant.util.FileUtils;
+import org.apache.tools.ant.util.MergingMapper;
 import org.apache.tools.ant.util.ResourceUtils;
+import org.apache.tools.ant.util.TeeOutputStream;
 
 /**
  * Assembles jmod files into an executable image.  Equivalent to the
@@ -1943,10 +1946,16 @@ extends Task {
 
         ByteArrayOutputStream stdout = new ByteArrayOutputStream();
         ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        OutputStream sysout = stdout;
+        OutputStream syserr = stderr;
+        if (verboseLevel != null) {
+            sysout = new TeeOutputStream(stdout, new LogOutputStream(this, verboseLevel.getLevel()));
+            syserr = new TeeOutputStream(stderr, new LogOutputStream(this, verboseLevel.getLevel()));
+        }
 
         int exitCode;
-        try (PrintStream out = new PrintStream(stdout);
-             PrintStream err = new PrintStream(stderr)) {
+        try (PrintStream out = new PrintStream(sysout);
+             PrintStream err = new PrintStream(syserr)) {
 
             exitCode = jlink.run(out, err, args.toArray(new String[0]));
         }
@@ -1962,17 +1971,6 @@ extends Task {
             }
 
             throw new BuildException(message.toString(), getLocation());
-        }
-
-        if (verboseLevel != null) {
-            int level = verboseLevel.getLevel();
-
-            if (stdout.size() > 0) {
-                log(stdout.toString(), level);
-            }
-            if (stderr.size() > 0) {
-                log(stderr.toString(), level);
-            }
         }
 
         log("Created " + outputDir.getAbsolutePath(), Project.MSG_INFO);
