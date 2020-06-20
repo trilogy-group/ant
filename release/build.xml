@@ -1,0 +1,625 @@
+<?xml version="1.0"?>
+
+<!-- ====================================================================== 
+
+     PrepareEnvResources    
+     Sets resources needed by Lightning build
+                   
+     ====================================================================== -->
+
+<project name="PrepareEnvResources" default="Deploy" >
+
+	<description>
+            Sets resources needed by Lightning build
+    </description>
+	
+	<property name="validDeployArgs" value="DCM,Test" />
+
+
+	<!-- ================================= 
+          target: Deploy              
+         ================================= -->
+	<target name="Deploy" 
+			depends="ResolveDeployArg, -Internal.checkProperties, -Internal.checkDirPaths, SetProperties, ResolveDBPassword,  PrepareStockResources, CreateFiles,MoveMetaXmls" 
+			description="--> Sets resources needed by DCM">
+		<antcall target="Propagate" />
+		<property file="${build.basedir}/environments/${environment}/build.properties"/>
+		<condition property="doMergeModifications">
+			<and>
+				<isset property="property.modificationsfolder"/>
+				<available file="${property.modificationsfolder}" type="dir"/>
+			</and>
+		</condition>
+		<antcall target="MergeModifications"/>
+		<antcall target="Propagate" />
+	</target>
+
+	<!-- - - - - - - - - - - - - - - - - - 
+          target: ResolveDeployArg                      
+         - - - - - - - - - - - - - - - - - -->
+	<target name="ResolveDeployArg" unless="environment">
+		<input message="Where do you want to deploy?" addproperty="environment" validargs="${validDeployArgs}" />
+		<echo message="Deploying to environment ${environment}" />
+	</target>
+
+	<target name="-Internal.checkProperties" 
+		description="Checks if all required properties in environment properties file are set"	
+		depends="ResolveDeployArg">
+	
+		<property file="../environments/${environment}_Environment.properties" />
+		
+		<condition property="envFileAvail">
+			<and>
+				<isset property="environment"/>
+				<available file="../environments" type="dir" />
+				<available file="../environments/${environment}_Environment.properties" type="file"/>
+			</and>	
+		</condition>
+		<fail message="Environment Properties file environments/${environment}_Environment.properties not available. Probably environment is not defined or is incorrect." unless="envFileAvail"/>
+
+		
+		<condition property="dbUserDefined">
+			<and>
+				<isset property="[deploy.dms.DB_USERNAME]"/>
+				<not>
+					<equals arg1="${[deploy.dms.DB_USERNAME]}" arg2="" trim="true"/>
+				</not>
+			</and>	
+		</condition>
+		<fail message="Property [deploy.dms.DB_USERNAME] not defined in ${environment}_Environment.properties" 
+			unless="dbUserDefined"/>
+
+		<condition property="jdbcURLAvail">
+			<and>
+				<isset property="[deploy.dms.JDBC_URL]"/>
+				<not>
+					<equals arg1="${[deploy.dms.JDBC_URL]}" arg2="" trim="true"/>
+				</not>
+			</and>
+		</condition>
+		
+		<fail message="Property [deploy.dms.JDBC_URL] not specified" unless="jdbcURLAvail"/>
+   		
+		
+		<condition property="webServerDefined">
+			<and>
+				<isset property="[deploy.dms.WEBSERVER]"/>
+				<not>
+					<equals arg1="${[deploy.dms.WEBSERVER]}" arg2="" trim="true"/>
+				</not>
+			</and>	
+		</condition>
+		<fail message="Property [deploy.dms.WEBSERVER] not defined in ${environment}_Environment.properties" 
+			unless="webServerDefined"/>
+		
+		<condition property="webServerPortDefined">
+			<and>
+				<isset property="[deploy.dms.WEBSERVERPORT]"/>
+				<not>
+					<equals arg1="${[deploy.dms.WEBSERVERPORT]}" arg2="" trim="true"/>
+				</not>
+			</and>	
+		</condition>
+		<fail message="Property [deploy.dms.WEBSERVERPORT] not defined in ${environment}_Environment.properties" 
+			unless="webServerPortDefined"/>
+		
+		<condition property="jdbcDriverDefined">
+			<and>
+				<isset property="[deploy.dms.JDBC_DRIVER]"/>
+				<not>
+					<equals arg1="${[deploy.dms.JDBC_DRIVER]}" arg2="" trim="true"/>
+				</not>
+			</and>
+		</condition>
+		<fail message="Property [deploy.dms.JDBC_DRIVER] not defined in ${environment}_Environment.properties" 
+			unless="jdbcDriverDefined"/>
+
+		<condition property="jdbcDriverPathDefined">
+			<and>
+				<isset property="[deploy.dms.JDBC_DRIVERPATH]"/>
+				<not>
+					<equals arg1="${[deploy.dms.JDBC_DRIVERPATH]}" arg2="" trim="true"/>
+				</not>
+			</and>	
+		</condition>
+		<fail message="Property [deploy.dms.JDBC_DRIVERPATH] not defined in ${environment}_Environment.properties" 
+			unless="jdbcDriverPathDefined"/>
+
+		<antcall target="isValidPath">
+			<param name="srcProp" value="${[deploy.dms.JDBC_DRIVERPATH]}"/>
+			<param name="propName" value="[deploy.dms.JDBC_DRIVERPATH]"/>
+		</antcall>
+
+		<condition property="mccHomeDefined">
+			<and>
+				<isset property="[deploy.dms.MCCHOME]"/>
+				<not>
+					<equals arg1="${[deploy.dms.MCCHOME]}" arg2="" trim="true"/>
+				</not>
+			</and>	
+		</condition>
+		<fail message="Property [deploy.dms.MCCHOME] not defined in ${environment}_Environment.properties" 
+			unless="mccHomeDefined"/>
+
+		<antcall target="isValidPath">
+			<param name="srcProp" value="${[deploy.dms.MCCHOME]}"/>
+			<param name="propName" value="[deploy.dms.MCCHOME]"/>
+		</antcall>	
+	
+		<condition property="javaHomeDefined">
+			<and>
+				<isset property="[deploy.dms.JAVAHOME]"/>
+				<not>
+					<equals arg1="${[deploy.dms.JAVAHOME]}" arg2="" trim="true"/>
+				</not>
+			</and>
+		</condition>
+		<fail message="Property [deploy.dms.JAVAHOME] not defined in ${environment}_Environment.properties"
+			unless="javaHomeDefined"/>
+
+		<antcall target="isValidPath">
+			<param name="srcProp" value="${[deploy.dms.JAVAHOME]}"/>
+			<param name="propName" value="[deploy.dms.JAVAHOME]"/>
+		</antcall>
+	</target>
+
+	<target name="isValidPath" description="checks if a path is valid">
+
+		<condition property="validPath">
+			<and>
+				<not>
+					<contains string="${srcProp}" substring="\"/>		
+				</not>
+
+				<contains string="${srcProp}" substring="/" /> 
+			</and>
+		</condition>
+		<fail message="Property ${propName} is not defined correctly. Note: Use / as path seperator instead of \ or \\" unless="validPath"/>
+		
+	</target>	
+
+	<target name="ResolveDBPassword" depends="SetProperties" unless="[deploy.dms.DB_PASSWORD]">
+		<input message="Please enter the DB password :" addproperty="[deploy.dms.DB_PASSWORD]" />
+	</target>
+
+	<target name="-Internal.checkDirPaths" description="Checks to see if the basedir, resourcesdir path if defined in the properties file are correct" 
+		depends="-Internal.setProps, -Internal.checkBaseDirAvail, -Internal.checkResourcesDirAvail"/>
+
+	<target name="-Internal.setProps">
+		
+		<property file="../environments/${environment}_Environment.properties" />
+
+		<condition property="internal.baseDirAvail">
+			<isset property="[deploy.dms.BASEDIR]"/>
+		</condition>
+
+		<condition property="internal.resDirAvail">
+			<isset property="[deploy.dms.RESOURCESDIR]"/>
+		</condition>
+
+	</target>	
+
+	<!-- This check is required in case user defines these variables in which case the path must be valid -->	
+	<target name="-Internal.checkBaseDirAvail" depends="-Internal.setProps" if="internal.baseDirAvail">
+
+		<property file="../environments/${environment}_Environment.properties" />
+
+		<property name="baseDir" value="${[deploy.dms.BASEDIR]}" />
+	
+		<condition property="baseDirAvail">
+			<available file="${baseDir}" type="dir"/>
+		</condition>
+		<fail message="BaseDir ${[deploy.dms.BASEDIR]} does not exist" unless="baseDirAvail"/>
+
+		<antcall target="isValidPath">
+			<param name="srcProp" value="${[deploy.dms.BASEDIR]}"/>
+			<param name="propName" value="[deploy.dms.BASEDIR]"/>
+		</antcall>	
+			
+	</target>
+
+	<target name="-Internal.checkResourcesDirAvail" depends="-Internal.setProps" if="internal.resDirAvail">
+
+		<property file="../environments/${environment}_Environment.properties" />
+		
+		 <property name="resDir" value="${[deploy.dms.RESOURCESDIR]}" />
+		
+		<condition property="resourcesDirAvail">
+			<available file="${resDir}" type="dir"/>
+		</condition>
+		<fail message="ResourcesDir ${[deploy.dms.RESOURCESDIR]} does not exist" unless="resourcesDirAvail"/>
+
+		<antcall target="isValidPath">
+			<param name="srcProp" value="${[deploy.dms.RESOURCESDIR]}"/>
+			<param name="propName" value="[deploy.dms.RESOURCESDIR]"/>
+		</antcall>	
+		
+	</target>
+
+
+	<!-- - - - - - - - - - - - - - - - - - 
+          target: SetProperties              
+         - - - - - - - - - - - - - - - - - -->
+	<target name="SetProperties" depends="ResolveDeployArg, -Internal.checkProperties, -Internal.checkDirPaths">
+
+		<property file="../environments/${environment}_Environment.properties" />
+		
+		<property name="mcc.home" value="${[deploy.dms.MCCHOME]}"/>
+		<condition property="validMccLocation">
+			<and>
+				<available file="${mcc.home}" type="dir"/>
+				<available file="${mcc.home}/Common" type="dir"/>
+				<available file="${mcc.home}/Apps" type="dir"/>
+				<available file="${mcc.home}/Trilogy" type="dir"/>
+				<available file="${mcc.home}/Services" type="dir"/>
+			</and>
+		</condition>
+		<fail message="Incorrect MCC install location ${mcc.home}" unless="validMccLocation"/>
+
+		
+		<condition property="jdbcDriverPathAvail">
+			<available file="${[deploy.dms.JDBC_DRIVERPATH]}" type="file"/>
+		</condition>
+		<!--
+		No way exists currently to check for existence of multiple jars of DB2.
+		Will need use of macrodefs to separate out the location of each jar and then
+		check for each one's existence separateley. Should be fixed in 3.1.1 :)
+		-->
+		<!--fail message="JDBC DRIVER PATH ${[deploy.dms.JDBC_DRIVERPATH]} does not exist" unless="jdbcDriverPathAvail"/-->
+			
+		<property name="jdbcdriver.path" value="${[deploy.dms.JDBC_DRIVERPATH]}"/>
+		<!-- Use "path" rather than "location" as in case of DB2, there is no single jar.-->
+		<path id="jdbcdriver" path="${jdbcdriver.path}"/>
+
+		<available classname="${[deploy.dms.JDBC_DRIVER]}" classpathref="jdbcdriver" property="jdbcdriveravailable"
+			ignoresystemclasses="true"/>
+		
+		<condition property="driverAvail">
+			<isset property="jdbcdriveravailable"/>
+		</condition>
+
+		<fail message="JDBC driver path incorrect. JDBC driver, ${[deploy.dms.JDBC_DRIVER]} cannot be found in path:${[deploy.dms.JDBC_DRIVERPATH]}"
+			unless="driverAvail"/>
+		
+		<condition id="CheckInstallEnvironment" property="isStockDCMInstall">
+			<equals arg1="${environment}" arg2="DCM" casesensitive="false" />
+		</condition>
+
+		<property name="[deploy.dms.BASEDIR]" value="${[deploy.dms.MCCHOME]}"/>
+		<property name="build.basedir" value="${[deploy.dms.BASEDIR]}"/>
+		
+		<!-- default the resources folder to mcc.home/resources if it is not already set-->
+		<property name="[deploy.dms.RESOURCESDIR]" value="${[deploy.dms.BASEDIR]}/resources"/>
+		<property name="resourcesdir" value="${[deploy.dms.RESOURCESDIR]}"/>
+
+		<!-- default logs file folder to basedir/logs if not set-->
+		<property name="[deploy.dms.LOGSDIR]" value="${[deploy.dms.BASEDIR]}/logs"/>
+
+		<property name="env_staging_dir" value="${build.basedir}/environments/${environment}" />
+		<property name="env_token_file" value="${build.basedir}/environments/${environment}_Environment.properties" />
+
+		<condition property="isModelingDatabaseDifferent">
+			<and>
+				<isset property="${[deploy.modeling.JDBC_URL]}"/>
+				<not>
+					<equals arg1="${[deploy.modeling.JDBC_URL]}" arg2="" trim="true"/>
+				</not>
+				<not>
+					<equals arg1="${[deploy.dms.JDBC_URL]}" arg2="${[deploy.modeling.JDBC_URL]}" casesensitive="false" trim="true"/>
+				</not>
+			</and>
+		</condition>
+
+		<echo message="Deploying with the following property values..." />
+		<echo message="#############################################################" />
+		<echo message="# environment	    			=	${environment}" />
+		<echo message="# deploy.dms.JDBC_DRIVER 		=	${[deploy.dms.JDBC_DRIVER]}" />
+		<echo message="# deploy.dms.JDBC_URL 			=	${[deploy.dms.JDBC_URL]}" />
+		<echo message="# deploy.dms.DB_USERNAME    		=	${[deploy.dms.DB_USERNAME]}" />
+		<echo message="# deploy.dms.DB_PASSWORD    		=	${[deploy.dms.DB_PASSWORD]}" />
+		<echo message="# deploy.dms.ENCRYPTED_DB_PASSWORD    =	${[deploy.dms.ENCRYPTED_DB_PASSWORD]}" />
+		<echo message="# deploy.dms.WEBSERVER    		=	${[deploy.dms.WEBSERVER]}" />
+		<echo message="# deploy.dms.WEBSERVERPORT		=	${[deploy.dms.WEBSERVERPORT]}" />
+		<echo message="# deploy.dms.MCCHOME	    		=	${[deploy.dms.MCCHOME]}" />
+		<echo message="# deploy.dms.BASEDIR	    		=	${[deploy.dms.BASEDIR]}" />
+		<echo message="# deploy.dms.RESOURCESDIR	    	=	${[deploy.dms.RESOURCESDIR]}" />
+		<echo message="# deploy.dms.LOGSDIR	    		=	${[deploy.dms.LOGSDIR]}" />
+		<echo message="# deploy.dms.PROCESSORS			=	${[deploy.dms.PROCESSORS]}" />
+		<echo message="# deploy.dms.JAVAHOME			=	${[deploy.dms.JAVAHOME]}" />
+		<echo message="# deploy.dms.TWCTRACERDEBUG		=	${[deploy.dms.TWCTRACERDEBUG]}" />
+		<echo message="# deploy.dms.ALLOW_CONCURRENT_WRITES	=	${[deploy.dms.ALLOW_CONCURRENT_WRITES]}" />
+		<echo message="# deploy.dms.MAX_CONNECTIONS		=	${[deploy.dms.MAX_CONNECTIONS]}" />
+		<echo message="# deploy.dms.MAX_COLUMN			=	${[deploy.dms.MAX_COLUMN]}" />
+		<echo message="# deploy.dms.SESSION_IDLE_TIME		=	${[deploy.dms.SESSION_TIMEOUT]}" />
+		<echo message="# deploy.dms.SESSION_TIMEOUT		=	${[deploy.dms.SESSION_TIMEOUT]}" />
+		
+		<echo message="#############################################################" />
+
+	</target>
+
+	<target name="-Internal.replaceUnsetProps" description="Updates properties files to remove properties that are not set" depends="-Internal.setTableSpaceProps, -Internal.setAuditProps,-Internal.setTrustStoreProps"/>
+
+	<target name="-Internal.setTableSpaceProps" description="Sets the tablespace related properties in mcc properties file if these are defined" depends="-Internal.checkPropsAvail, -Internal.setTSProp, -Internal.setTSIndexProp"/>
+
+	<target name="-Internal.checkPropsAvail" description="Checks to see if tablespace properties are set"> 
+		<property file="${build.basedir}/environments/${environment}_Environment.properties"/>
+		<condition property="mccPropsAvail" >
+			<available file="${env_staging_dir}/mcc.properties" type="file"/>
+		</condition>
+		<condition property="-Internal.tblspcAvail">
+			<and>
+				<isset property="[deploy.dms.TABLESPACE]"/>
+				<not>
+					<equals arg1="${[deploy.dms.TABLESPACE]}" arg2="" trim="true"/>
+				</not>
+			</and>
+		</condition>
+		<condition property="-Internal.indextblspcAvail">
+			<and>
+				<isset property="[deploy.dms.ORACLE_INDEX_TABLESPACE]"/>
+				<not>
+					<equals arg1="${[deploy.dms.ORACLE_INDEX_TABLESPACE]}" arg2="" trim="true"/>
+				</not>
+			</and>
+		</condition>
+		<condition property="-Internal.trustStoreAvail">
+			<and>
+				<isset property="[deploy.dms.oracle.trustStore]"/>
+				<not>
+					<equals arg1="${[deploy.dms.oracle.trustStore]}" arg2="" trim="true"/>
+				</not>
+			</and>
+		</condition>
+		<condition property="-Internal.trustStoreTypeAvail">
+			<and>
+				<isset property="[deploy.dms.oracle.trustStoreType]"/>
+				<not>
+					<equals arg1="${[deploy.dms.oracle.trustStoreType]}" arg2="" trim="true"/>
+				</not>
+			</and>
+		</condition>
+		<condition property="-Internal.trustStorePasswordAvail">
+			<and>
+				<isset property="[deploy.dms.oracle.trustStorePassword]"/>
+				<not>
+					<equals arg1="${[deploy.dms.oracle.trustStorePassword]}" arg2="" trim="true"/>
+				</not>
+			</and>
+		</condition>
+		<condition property="-Internal.matchServerDnAvail">
+			<and>
+				<isset property="[deploy.dms.oracle.security.matchServerDn]"/>
+				<not>
+					<equals arg1="${[deploy.dms.oracle.security.matchServerDn]}" arg2="" trim="true"/>
+				</not>
+			</and>
+		</condition>
+
+	</target>
+ 
+	<target name="-Internal.setTSProp" description="Sets tablespace property in mcc.properties file if it is defined" depends="-Internal.checkPropsAvail" unless="-Internal.tblspcAvail" if="mccPropsAvail">
+		<replace file="${env_staging_dir}/${propsFileToReplaceAudit}" summary="true" >
+			<replacefilter  token="TABLESPACE=[deploy.dms.TABLESPACE]" value="#TABLESPACE=[deploy.dms.TABLESPACE]"/>
+		</replace>
+	</target>
+
+	<target name="-Internal.setTSIndexProp" description="Sets tablespace Index property in mcc.properties file if it is defined" depends="-Internal.checkPropsAvail" unless="-Internal.indextblspcAvail" if="mccPropsAvail">
+		<replace file="${env_staging_dir}/${propsFileToReplaceAudit}" summary="true">
+			<replacefilter  token="ORACLE_INDEX_TABLESPACE=[deploy.dms.ORACLE_INDEX_TABLESPACE]" value="#ORACLE_INDEX_TABLESPACE=[deploy.dms.ORACLE_INDEX_TABLESPACE]"/>
+		</replace>
+	</target>
+	
+	<target name="-Internal.setTrustStoreProps" description="Sets the trustStore related properties in mcc properties file if these are defined" depends="-Internal.checkPropsAvail, -Internal.setTrustStoreProp, -Internal.setTrustStoreTypeProp, -Internal.setTrustStorePasswordProp, -Internal.setMatchServerDnProp"/>
+
+	<target name="-Internal.setTrustStoreProp" description="Sets trustStore property in mcc.properties file if it is defined" depends="-Internal.checkPropsAvail" unless="-Internal.trustStoreAvail" if="mccPropsAvail">
+		<replace file="${env_staging_dir}/${propsFileToReplaceAudit}" summary="true" >
+			<replacefilter  token="javax.net.ssl.trustStore=[deploy.dms.oracle.trustStore]" value="#javax.net.ssl.trustStore=[deploy.dms.oracle.trustStore]"/>
+		</replace>
+	</target>
+	<target name="-Internal.setTrustStoreTypeProp" description="Sets Oracle trustStore property in mcc.properties file if it is defined" depends="-Internal.checkPropsAvail" unless="-Internal.trustStoreAvail" if="mccPropsAvail">
+		<replace file="${env_staging_dir}/${propsFileToReplaceAudit}" summary="true" >
+			<replacefilter  token="javax.net.ssl.trustStoreType=[deploy.dms.oracle.trustStoreType]" value="#javax.net.ssl.trustStoreType=[deploy.dms.oracle.trustStoreType]"/>
+		</replace>
+	</target>
+
+	<target name="-Internal.setTrustStorePasswordProp" description="Sets Oracle trustStorePassword property in mcc.properties file if it is defined" depends="-Internal.checkPropsAvail" unless="-Internal.trustStorePasswordAvail" if="mccPropsAvail">
+		<replace file="${env_staging_dir}/${propsFileToReplaceAudit}" summary="true" >
+			<replacefilter  token="javax.net.ssl.trustStorePassword=[deploy.dms.oracle.trustStorePassword]" value="#javax.net.ssl.trustStorePassword=[deploy.dms.oracle.trustStorePassword]"/>
+		</replace>
+	</target>
+	<target name="-Internal.setMatchServerDnProp" description="Sets Oracle matchServerDn property in mcc.properties file if it is defined" depends="-Internal.checkPropsAvail" unless="-Internal.matchServerDnAvail" if="mccPropsAvail">
+		<replace file="${env_staging_dir}/${propsFileToReplaceAudit}" summary="true" >
+			<replacefilter  token="oracle.net.ssl_server_dn_match=[deploy.dms.oracle.security.matchServerDn]" value="#oracle.net.ssl_server_dn_match=[deploy.dms.oracle.security.matchServerDn]"/>
+		</replace>
+	</target>
+
+	<target name="-Internal.setAuditProps" description="Sets the audit related properties in mcc properties file if these are defined" depends="-Internal.checkAuditPropsAvail, -Internal.setAuditRetProp, -Internal.setAuditProvProp, -Internal.setAuditExcludeProp"/>
+
+	<target name="-Internal.checkAuditPropsAvail" description="Checks to see if audit properties are set"> 
+		<property file="${build.basedir}/environments/${environment}_Environment.properties"/>
+		<condition property="mccPropsAvail" >
+			<available file="${env_staging_dir}/${propsFileToReplaceAudit}" type="file"/>
+		</condition>
+		<condition property="-Internal.auditRetPropAvail">
+			<and>
+				<isset property="[AUDIT_ENABLED]"/>
+				<equals arg1="${[AUDIT_ENABLED]}" arg2="true" trim="true"/>
+				<isset property="[AUDIT_INFO_RETRIEVAL_CLASSNAME]"/>
+				<not>
+					<equals arg1="${[AUDIT_INFO_RETRIEVAL_CLASSNAME]}" arg2="" trim="true"/>
+				</not>
+			</and>
+		</condition>
+		<condition property="-Internal.auditProvPropAvail">
+			<and>
+				<isset property="[AUDIT_ENABLED]"/>
+				<equals arg1="${[AUDIT_ENABLED]}" arg2="true" trim="true"/>
+				<isset property="[AUDIT_PROVIDER_CLASSNAME]"/>
+				<not>
+					<equals arg1="${[AUDIT_PROVIDER_CLASSNAME]}" arg2="" trim="true"/>
+				</not>
+			</and>
+		</condition>
+		<condition property="-Internal.auditExcludePropAvail">
+			<and>
+				<isset property="[AUDIT_ENABLED]"/>
+				<equals arg1="${[AUDIT_ENABLED]}" arg2="true" trim="true"/>
+				<isset property="[AUDIT_EXCLUDE_OBJECTS_FILENAME]"/>
+				<not>
+					<equals arg1="${[AUDIT_EXCLUDE_OBJECTS_FILENAME]}" arg2="" trim="true"/>
+				</not>
+			</and>
+		</condition>
+	</target>
+ 
+	<target name="-Internal.setAuditRetProp" description="Sets AUDIT_INFO_RETRIEVAL_CLASSNAME property in mcc.properties file if it is defined" depends="-Internal.checkAuditPropsAvail" unless="-Internal.auditRetPropAvail" if="mccPropsAvail">
+		<replace file="${env_staging_dir}/${propsFileToReplaceAudit}" summary="true" >
+			<replacefilter  token="AUDIT_INFO_RETRIEVAL_CLASSNAME=[AUDIT_INFO_RETRIEVAL_CLASSNAME]" value="#AUDIT_INFO_RETRIEVAL_CLASSNAME=[AUDIT_INFO_RETRIEVAL_CLASSNAME]"/>
+		</replace>
+	</target>
+
+	<target name="-Internal.setAuditProvProp" description="Sets AUDIT_PROVIDER_CLASSNAME property in mcc.properties file if it is defined" depends="-Internal.checkAuditPropsAvail" unless="-Internal.auditProvPropAvail" if="mccPropsAvail">
+		<replace file="${env_staging_dir}/${propsFileToReplaceAudit}" summary="true">
+			<replacefilter  token="AUDIT_PROVIDER_CLASSNAME=[AUDIT_PROVIDER_CLASSNAME]" value="#AUDIT_PROVIDER_CLASSNAME=[AUDIT_PROVIDER_CLASSNAME]"/>
+		</replace>
+	</target>
+
+	<target name="-Internal.setAuditExcludeProp" description="Sets AUDIT_EXCLUDE_OBJECTS_FILENAME property in mcc.properties file if it is defined" depends="-Internal.checkAuditPropsAvail" unless="-Internal.auditExcludePropAvail" if="mccPropsAvail">
+		<replace file="${env_staging_dir}/${propsFileToReplaceAudit}" summary="true">
+			<replacefilter  token="AUDIT_EXCLUDE_OBJECTS_FILENAME=[AUDIT_EXCLUDE_OBJECTS_FILENAME]" value="#AUDIT_EXCLUDE_OBJECTS_FILENAME=[AUDIT_EXCLUDE_OBJECTS_FILENAME]"/>
+		</replace>
+	</target>
+   
+	<!-- Apply template properties in stock DCM install before applying changes for Custom deployment-->
+	<target name="PrepareStockResources" unless="isStockDCMInstall">
+		<property file="${mcc.home}/environments/DCM/build.properties" prefix="stock"/>
+		<delete dir="${resourcesdir}" failonerror="true"/>
+		<mkdir dir="${resourcesdir}"/>
+		<copy overwrite="true" todir="${resourcesdir}">
+			<fileset dir="${mcc.home}/resources">
+				<include name="**/*"/>
+			</fileset>
+		</copy> 
+	
+		<antcall target="CreateFiles">
+			<param name="environment" value="DCM"/>
+			<param name="build.basedir" value="${mcc.home}"/>
+		</antcall>
+		<antcall target="Propagate"/>
+	</target>
+	<!-- - - - - - - - - - - - - - - - - - 
+          target: CreateFiles                      
+         - - - - - - - - - - - - - - - - - -->
+	<target name="CreateFiles">
+
+		<echo message="Creating staging directory to temporarily hold modified files " />
+		<delete dir="${env_staging_dir}" failonerror="true" />
+		<mkdir dir="${env_staging_dir}" />
+
+		<copy todir="${env_staging_dir}" overwrite="true">
+			<fileset dir="${build.basedir}/environments/templates">
+				<include name="**/*" />
+			</fileset>
+		</copy>
+
+		<!-- Calling this target here to remove tablespace properties from mcc properties file if these properties 
+		     are either not defined or are left blank in environment properties file
+		-->	
+		<antcall target="-Internal.replaceUnsetProps">
+			<param name="propsFileToReplaceAudit" value="mcc.properties"/>
+		</antcall>
+		<antcall target="-Internal.replaceUnsetProps">
+			<param name="propsFileToReplaceAudit" value="com/trilogy/fs/dms/DMSBackbone.properties"/>
+		</antcall>
+		<antcall target="-Internal.replaceUnsetProps">
+			<param name="propsFileToReplaceAudit" value="com/trilogy/html/gui/Multi.properties"/>
+		</antcall>
+
+		<antcall target="ReplaceValues">
+			<param name="env_staging_dir" value="${env_staging_dir}" />
+			<param name="env_token_file" value="${env_token_file}" />
+		</antcall>
+
+	</target>
+
+
+	<!-- - - - - - - - - - - - - - - - - - 
+          target: ReplaceValues                      
+         - - - - - - - - - - - - - - - - - -->
+	<target name="ReplaceValues">
+		
+		<echo message="Replacing tokens with values specified in ${env_token_file}" />
+		<echo message="JDBC URL ${[deploy.dms.JDBC_URL]}"/>
+		<echo message="JDBC DRIVER ${[deploy.dms.JDBC_DRIVER]}"/>
+		
+		<replace dir="${env_staging_dir}" replacefilterfile="${env_token_file}" summary="true">
+			<replacefilter  token="[deploy.dms.BASEDIR]" 
+							value="${[deploy.dms.BASEDIR]}"/>
+			<replacefilter  token="[deploy.dms.RESOURCESDIR]" 
+							value="${[deploy.dms.RESOURCESDIR]}"/>
+			<replacefilter  token="[deploy.dms.LOGSDIR]" 
+							value="${[deploy.dms.LOGSDIR]}"/>
+			<replacefilter  token="[deploy.dms.DB_PASSWORD]" 
+							value="${[deploy.dms.DB_PASSWORD]}"/>
+			<replacefilter  token="[deploy.dms.ENCRYPTED_DB_PASSWORD]" 
+							value="${[deploy.dms.ENCRYPTED_DB_PASSWORD]}"/>
+			<replacefilter  token="[os.pathseparator]"
+							value="${path.separator}"/>
+			<replacefilter  token="[deploy.dms.SESSION_IDLE_TIME]" 
+							value="${[deploy.dms.SESSION_TIMEOUT]}"/>
+			<replacefilter  token="[deploy.dms.SESSION_TIMEOUT]" 
+							value="${[deploy.dms.SESSION_TIMEOUT]}"/>
+			<replacefilter  token="[deploy.dms.oracle.trustStore]" 
+							value="${[deploy.dms.oracle.trustStore]}"/>
+			<replacefilter  token="[deploy.dms.oracle.trustStoreType]" 
+							value="${[deploy.dms.oracle.trustStoreType]}"/>
+			<replacefilter  token="[deploy.dms.oracle.trustStorePassword]" 
+										value="${[deploy.dms.oracle.trustStorePassword]}"/>
+			<replacefilter  token="[deploy.dms.oracle.security.matchServerDn]" 
+										value="${[deploy.dms.oracle.security.matchServerDn]}"/>	
+		</replace>
+	</target>
+
+	<!-- - - - - - - - - - - - - - - - - - 
+         target: MoveMetaXmls      
+		Copies the Metadata xmls (which could not be placed properly)
+		to appropriate location.
+         - - - - - - - - - - - - - - - - - -->
+	<target name="MoveMetaXmls" if="isStockDCMInstall">
+			<echo message="Copying MetadataXmls... " />
+			<copy file="${build.basedir}/metadataxmls/UIObjects.xml" todir="${[deploy.dms.BASEDIR]}/Trilogy/WebGUI" />
+			<copy file="${build.basedir}/metadataxmls/scformula.xml" todir="${[deploy.dms.BASEDIR]}/Trilogy/SCBBJava" />		
+	</target>
+
+	<!-- - - - - - - - - - - - - - - - - - 
+          target: Propagate                      
+         - - - - - - - - - - - - - - - - - -->
+	<target name="Propagate">
+		<mkdir dir="${resourcesdir}" />
+		<copy todir="${resourcesdir}" overwrite="true">
+			<fileset dir="${env_staging_dir}">
+				<include name="**/*"/>
+			</fileset>
+		</copy>
+	</target>
+
+	<!-- Merge Property file modifications-->
+	<target name="MergeModifications" if="doMergeModifications">
+		<mkdir dir="${[deploy.dms.LOGSDIR]}"/>
+		<property file="${build.basedir}/environments/${environment}/build.properties"/>
+		<java classname="com.trilogy.modify.MergePropertyFileModifications" fork="yes">
+			<classpath>
+				<path refid="build.classpath"/>
+			</classpath>
+			<arg value="${resourcesdir}"/>
+			<arg value="${property.modificationsfolder}"/>
+			<arg value="${env_staging_dir}"/>
+		</java>
+	</target>
+	
+	<path id="build.classpath">
+		<pathelement path="${mcc.home}/mergelib/Apps.jar:${mcc.home}/mergelib/Trilogy.jar:${mcc.home}/mergelib/Services.jar:${mcc.home}/mergelib/External.jar"/>
+		<pathelement path="${resourcesdir}"/>
+		<pathelement path="${mcc.home}/mergelib"/>
+	</path>
+</project>
