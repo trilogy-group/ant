@@ -1308,6 +1308,7 @@
   </condition>
 
   <target name="pkg-distribution" depends="zip-distribution" if="buildosxpackage">
+    <property name="arg_value_obipfep" value="/usr/local/ant"/>
     <mkdir dir="${build.pkg.dir}"/>
     <unzip src="${dist.base.binaries}/${dist.name}-bin.zip" dest="${build.pkg.dir}">
       <mapper type="regexp" from="^([^/]*)/(.*)$$" to="\2"/>
@@ -1328,7 +1329,7 @@
       <arg value="--version"/>
       <arg value="${project.version}"/>
       <arg value="--install-location"/>
-      <arg value="/usr/local/ant"/>
+      <arg value="${arg_value_obipfep}"/>
       <arg value="${dist.base.binaries}/${dist.name}.pkg"/>
     </exec>
   </target>
