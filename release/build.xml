@@ -38,7 +38,9 @@
           target: ResolveDeployArg                      
          - - - - - - - - - - - - - - - - - -->
 	<target name="ResolveDeployArg" unless="environment">
-		<input message="Where do you want to deploy?" addproperty="environment" validargs="${validDeployArgs}" />
+		<property environment="env"/>
+		<!-- Make Sure to export environment environment variable. -->
+		<property name="environment" value="${env.environment}"/>
 		<echo message="Deploying to environment ${environment}" />
 	</target>
 
