@@ -1308,6 +1308,7 @@
   </condition>
 
   <target name="pkg-distribution" depends="zip-distribution" if="buildosxpackage">
+    <property name="exec_executable_qezwnpg" value="/usr/bin/pkgbuild"/>
     <mkdir dir="${build.pkg.dir}"/>
     <unzip src="${dist.base.binaries}/${dist.name}-bin.zip" dest="${build.pkg.dir}">
       <mapper type="regexp" from="^([^/]*)/(.*)$$" to="\2"/>
@@ -1320,7 +1321,7 @@
         <include name="*.py"/>
       </fileset>
     </chmod>
-    <exec executable="/usr/bin/pkgbuild">
+    <exec executable="${exec_executable_qezwnpg}">
       <arg value="--root"/>
       <arg value="${build.pkg.dir}"/>
       <arg value="--identifier"/>
