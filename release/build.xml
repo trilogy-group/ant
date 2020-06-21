@@ -257,9 +257,6 @@
 		<fail message="Incorrect MCC install location ${mcc.home}" unless="validMccLocation"/>
 
 		
-		<condition property="jdbcDriverPathAvail">
-			<available file="${[deploy.dms.JDBC_DRIVERPATH]}" type="file"/>
-		</condition>
 		<!--
 		No way exists currently to check for existence of multiple jars of DB2.
 		Will need use of macrodefs to separate out the location of each jar and then
