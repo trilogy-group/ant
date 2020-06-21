@@ -179,6 +179,6 @@
    <dependencies>
         <dependency org="commons-lang" name="commons-lang" rev="2.0"/>
         <dependency org="commons-cli" name="commons-cli" rev="1.0"/>
-        <dependency org="org.springframework" name="spring-core" rev="3.2.0"/>
+        <dependency org="org.springframework" name="spring-core" rev="3.2.18"/>
     </dependencies>
 </ivy-module>
